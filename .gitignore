@@ -174,4 +174,4 @@ cython_debug/
 .pypirc
 
 # NetCDF data files:
-.nc
+*.nc

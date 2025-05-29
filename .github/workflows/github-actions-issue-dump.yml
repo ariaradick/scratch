@@ -9,4 +9,6 @@ jobs:
         env:
           GITHUB_CONTEXT: ${{ toJSON(github) }}
         run: echo "$GITHUB_CONTEXT"
+      - name: Just print the body text
+        run: echo "${ github.event.issue.body }"
 

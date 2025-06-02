@@ -1,0 +1,11 @@
+variable_id,realm
+slp,atmos_4xdaily
+precip,atmos_4xdaily_avg
+snow_tot,atmos_4xdaily_avg
+wind_ref,atmos_daily
+t_ref_max,atmos_daily
+t_ref_min,atmos_daily
+land_daily/snow,land_daily
+WVP,atmos
+ssh,ocean
+MLD_003,ocean

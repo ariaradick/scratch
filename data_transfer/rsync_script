@@ -7,7 +7,8 @@ LOGFILE="$(echo $LISTNAME)_log_$(date +"%Y-%m-%dT%H:%M").txt"
 rsync -airnv --files-from=$1 /decp/SPEAR_MED /work/Aria.Radick/TFTEST > $DRYLOG
 touch $LOGFILE
 echo "" > $LOGFILE
-(bash check_complete $LOGFILE $DRYLOG $LISTNAME) & (bash rsync_tftest $1 $LOGFILE)
+(bash check_stall $LOGFILE $DRYLOG $LISTNAME) &
+(rsync -airv --files-from=$1 /decp/SPEAR_MED /work/Aria.Radick/TFTEST > $LOGFILE)
 
 if [ $? -ne 0 ]; then
     pkill -f "check_complete"

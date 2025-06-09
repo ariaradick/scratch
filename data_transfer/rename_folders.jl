@@ -1,5 +1,6 @@
 paths_in = String[]
 paths_out = String[]
+parent_dir = "/data/2/GFDL-LARGE-ENSEMBLES/TFTEST/"
 
 for i in 1:10
     n = 3(i-1)
@@ -17,8 +18,8 @@ end
 commands = String[]
 
 for i in eachindex(paths_in)
-    push!(commands, "ln -s $(paths_in[i]) $(paths_out[i])")
+    push!(commands, "ln -s $(parent_dir)$(paths_in[i]) $(parent_dir)$(paths_out[i])")
 end
 
 using DelimitedFiles: writedlm
-writedlm("test.txt", commands)
+writedlm("symlink_ensembles.sh", commands)

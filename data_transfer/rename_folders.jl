@@ -14,13 +14,11 @@ for i in 1:10
     end
 end
 
-mv_commands = String[]
-rm_commands = String[]
+commands = String[]
 
 for i in eachindex(paths_in)
-    push!(mv_commands, "mv $(paths_in[i])/* $(paths_out[i])")
-    push!(rm_commands, "rm $(paths_in[i])")
+    push!(commands, "ln -s $(paths_in[i]) $(paths_out[i])")
 end
 
 using DelimitedFiles: writedlm
-writedlm("test.txt", mv_commands)
+writedlm("test.txt", commands)

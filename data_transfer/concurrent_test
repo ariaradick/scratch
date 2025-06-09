@@ -1,0 +1,18 @@
+#!/bin/bash
+
+LISTNAME="$(basename $1 .txt)"
+DRYLOG="$(echo $LISTNAME)_log_dry_$(date +"%Y-%m-%dT%H:%M").txt"
+LOGFILE="$(echo $LISTNAME)_log_$(date +"%Y-%m-%dT%H:%M").txt"
+
+rsync -airnv --files-from=$1 /decp/SPEAR_MED /work/Aria.Radick/TFTEST > $DRYLOG
+touch $LOGFILE
+echo "" > $LOGFILE
+(bash check_complete $LOGFILE $DRYLOG $LISTNAME) & (bash rsync_tftest $1 $LOGFILE)
+
+if [ $? -ne 0 ]; then
+    pkill -f "check_complete"
+    tail -n 5 $LOGFILE | mail -s "$LISTNAME - Data transfer error" "aria.radick@noaa.gov"
+else
+    pkill -f "check_complete"
+    tail -n 2 $LOGFILE | mail -s "$LISTNAME - Data transfer complete!" "aria.radick@noaa.gov"
+fi

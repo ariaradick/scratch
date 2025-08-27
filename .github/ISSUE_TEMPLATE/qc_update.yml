@@ -1,0 +1,48 @@
+name: QC Update
+description: Update the QC status of a variable.
+title: "[QC]: "
+labels: ["qc update"]
+body:
+  - type: markdown
+    attributes:
+      value: "## Please enter some information about the datasets that were checked:"
+  - type: input
+    id: variable_id
+    attributes:
+      label: Variable ID
+      description: "What is the variable id? (see the dataset's filename)"
+    validations:
+      required: true
+  - type: dropdown
+    id: experiment_id
+    attributes:
+      label: Experiment
+      description: Are the checked datasets from historical or SSP585?
+      options:
+        - Historical
+        - SSP585
+      default: 0
+    validations:
+      required: true
+  - type: input
+    id: time_range
+    attributes:
+      label: Time Range
+      description: Enter the time range that was checked. Enter multiple with commas separating them or leave blank to report for all time ranges.
+      placeholder: Leave blank to select all...
+  - type: dropdown
+    id: pass_qc
+    attributes:
+      label: Do the datasets pass the quality assurance checks?
+      options:
+        - "Yes"
+        - "No"
+      default: 0
+    validations:
+      required: true
+  - type: textarea
+    id: explanation
+    attributes:
+      label: "Explain the steps taken to ensure quality assurance:"
+    validations:
+      required: true

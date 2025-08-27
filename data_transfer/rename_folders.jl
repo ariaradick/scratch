@@ -19,8 +19,8 @@ end
 commands = String[]
 
 for i in eachindex(paths_in)
-    push!(commands, "ln -s $(parent_dir)$(paths_in[i]) $(parent_dir)$(paths_out[i])")
+    push!(commands, "mv $(parent_dir)$(paths_in[i]) $(parent_dir)$(paths_out[i])")
 end
 
 using DelimitedFiles: writedlm
-writedlm("symlink_ensembles.sh", commands)
+writedlm("make_hardlinks.sh", commands)

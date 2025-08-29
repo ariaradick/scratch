@@ -3,7 +3,7 @@ import os,sys
 import xarray as xr
 from netCDF4 import Dataset
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timezone
 from shapely.geometry import Polygon, mapping
 import time
 
@@ -15,18 +15,40 @@ all_columns = ["activity_id", "institution_id", "source_id", "experiment_id",
                 "time_range", "chunk_freq","platform","dimensions",
                 "cell_methods","standard_name","path"]
 props_template = {c : '' for c in all_columns}
+props_template["project"] = "SPEAR-FLP"
+props_template["product"] = "model-output"
+props_template["institution_id"] = "NOAA-GFDL"
+props_template["source_id"] = "SPEAR-MED"
 temporal_extents = {"SPEAR_c192_o1_Scen_SSP585_IC2011_K50" : 
-                    [datetime(2011,1,1), datetime(2100, 12, 31, 23)],
+                    [datetime(2011,1,1,0), datetime(2100, 12, 31, 23)],
                     "SPEAR_c192_o1_Hist_AllForc_IC1921_K50" : 
                     [datetime(1921, 1, 1, 0), datetime(2010, 12, 31, 23)]}
+exp_titles = {
+    "SPEAR_c192_o1_Scen_SSP585_IC2011_K50" : "Scenario SSP5-8.5",
+    "SPEAR_c192_o1_Hist_AllForc_IC1921_K50" : "Historical"
+}
 
 
+
+def minmax(array):
+    return np.array([float(np.min(array)), float(np.max(array))])
+
+def minmax_bounded(array, bnds):
+    x = minmax(array)
+    while x[0] < bnds[0]:
+        x += 1
+    while x[1] > bnds[1]:
+        x -= 1
+    if x[0] < bnds[0] or x[1] > bnds[1]:
+        raise ValueError("bbox out of bounds")
+    return x
 
 class MetadataSlow():
-    def __init__(self, lats, lons, long_name):
+    def __init__(self, lats, lons, long_name, units):
         self.lats = lats
         self.lons = lons
         self.long_name = long_name
+        self.units = units
 
 class MetadataSlowLoader():
     def __init__(self):
@@ -52,21 +74,18 @@ class MetadataSlowLoader():
             ds = Dataset(path, memory=None)
 
             if properties["realm"] == "ocean":
-                top = float(np.max(ds.variables["yh"]))
-                bottom = float(np.min(ds.variables["yh"]))
-                left = float(np.min(ds.variables["xh"]))
-                right = float(np.max(ds.variables["xh"]))
+                bt = minmax_bounded(ds.variables["yh"], [-90,90])
+                lr = minmax_bounded(ds.variables["xh"], [-180,180])
             else:
-                top = float(np.max(ds.variables["lat"]))
-                bottom = float(np.min(ds.variables["lat"]))
-                left = float(np.min(ds.variables["lon"]))
-                right = float(np.max(ds.variables["lon"]))
+                bt = minmax_bounded(ds.variables["lat"], [-90,90])
+                lr = minmax_bounded(ds.variables["lon"], [-180,180])
 
             long_name = ds.variables[var_id].long_name
-            self.dict[var_id] = MetadataSlow([bottom,top], [left,right], long_name)
+            units = ds.variables[var_id].units
+            self.dict[var_id] = MetadataSlow(bt, lr, long_name, units)
         
         bbox,fp = self._get_bbox_footprint(var_id)
-        return (bbox,fp,self.dict[var_id].long_name)
+        return (bbox,fp,self.dict[var_id].long_name,self.dict[var_id].units)
 
 
 
@@ -82,14 +101,14 @@ def get_metadata(path_to_file, dir_meta, file_meta, properties=props_template):
             d[x] = filename[i]
     starttime, endtime = d["time_range"].split('-')
     if len(starttime) == 8:
-        starttime = datetime.strptime(starttime,'%Y%m%d')
-        endtime = datetime.strptime(endtime,'%Y%m%d')
+        starttime = datetime.strptime(starttime,'%Y%m%d').replace(tzinfo=timezone.utc)
+        endtime = datetime.strptime(endtime,'%Y%m%d').replace(tzinfo=timezone.utc)
     elif len(starttime) == 6:
-        starttime = datetime.strptime(starttime,'%Y%m')
-        endtime = datetime.strptime(endtime,'%Y%m')
+        starttime = datetime.strptime(starttime,'%Y%m').replace(tzinfo=timezone.utc)
+        endtime = datetime.strptime(endtime,'%Y%m').replace(tzinfo=timezone.utc)
     elif len(starttime) == 10:
-        starttime = datetime.strptime(starttime,'%Y%m%d%H')
-        endtime = datetime.strptime(endtime,'%Y%m%d%H')
+        starttime = datetime.strptime(starttime,'%Y%m%d%H').replace(tzinfo=timezone.utc)
+        endtime = datetime.strptime(endtime,'%Y%m%d%H').replace(tzinfo=timezone.utc)
     return (d, starttime, endtime)
 
 # [-89.75, 89.75] ; [0.3125, 359.6875]
@@ -97,45 +116,94 @@ def get_metadata(path_to_file, dir_meta, file_meta, properties=props_template):
 # hard-coded, so need to figure out a better way to do this
 def make_catalog(directory, dir_meta=dirs, f_meta=fname):
     catalog = pystac.Catalog(id="test-catalog", description="Test Catalog")
-    collections = {}
+    
+    item_dicts = {}
+    slow_metadata = MetadataSlowLoader()
 
     files = [os.path.join(dirpath,f) for (dirpath, dirnames, filenames) in 
              os.walk(directory) for f in filenames]
-    N_files = len(files)
-    digits_files = int(np.ceil(np.log10(N_files)))
-
-    slow_metadata = MetadataSlowLoader()
-
-    IDs = [str(i).zfill(digits_files) for i in range(N_files)]
+    files.sort()
+    # N_files = len(files)
+    # digits_files = int(np.ceil(np.log10(N_files)))
+    # IDs = [str(i).zfill(digits_files) for i in range(N_files)]
 
     for i,f in enumerate(files):
-        print(f)
+        # print(f)
         metadata_d, stime, etime = get_metadata(f, dir_meta, f_meta)
-        bbox, footprint, long_name = slow_metadata.get(f, metadata_d)
-        metadata_d["standard_name"] = long_name
-
-        item = pystac.Item(id=IDs[i], geometry=footprint, 
-                bbox=bbox, properties=metadata_d, start_datetime=stime, 
-                end_datetime=etime, datetime=None)
-
-        asset = pystac.Asset(href=f)
-        item.add_asset(key="dataset", asset=asset)
 
         exp_id = metadata_d["experiment_id"]
-        if exp_id in collections:
-            collections[exp_id].add_item(item)
+        if exp_id not in item_dicts:
+            item_dicts[exp_id] = {}
+            print('here')
+        exp_dict = item_dicts[exp_id]
+
+        var_id = metadata_d["variable_id"]
+        if var_id not in exp_dict:
+            bbox, footprint, long_name, units = slow_metadata.get(f, metadata_d)
+            metadata_d["standard_name"] = long_name
+            metadata_d["variable_units"] = units
+
+            exp_dict[var_id] = pystac.Item(id=var_id, geometry=footprint, 
+                bbox=bbox, properties=dict(metadata_d), start_datetime=stime, 
+                end_datetime=etime, datetime=None)
+            
+            del exp_dict[var_id].properties["time_range"]
+            del exp_dict[var_id].properties["member_id"]
+            del exp_dict[var_id].properties["path"]
+
         else:
-            collections[exp_id] = pystac.Collection(
-                id=exp_id,
+            item_start = datetime.fromisoformat(exp_dict[var_id].properties["start_datetime"])
+            if stime < item_start:
+                exp_dict[var_id].properties["start_datetime"] = stime.replace(tzinfo=None).isoformat()+'Z'
+
+            item_end = datetime.fromisoformat(exp_dict[var_id].properties["end_datetime"])
+            if etime > item_end:
+                exp_dict[var_id].properties["end_datetime"] = etime.replace(tzinfo=None).isoformat()+'Z'
+
+        asset = pystac.Asset(
+            href=f,
+            title="{}.{}".format(
+                metadata_d["time_range"], metadata_d["member_id"]
+            ),
+            media_type="application/netcdf",
+            roles=["data"]
+        )
+
+        exp_dict[var_id].add_asset(
+            key=asset.title,
+            asset=asset
+        )
+    
+    collections = []
+    for (k,v) in item_dicts.items():
+        unique_bbox_set = set()
+        for item in v.values():
+            unique_bbox_set.add(tuple(item.bbox))
+        unique_bbox_list = []
+        for tup in unique_bbox_set:
+            unique_bbox_list.append(list(tup))
+        collections.append(pystac.Collection(
+                id=k,
                 description="NA",
                 extent=pystac.collection.Extent(
-                    pystac.collection.SpatialExtent([bbox]),
-                    pystac.collection.TemporalExtent([temporal_extents[exp_id]])
+                    pystac.collection.SpatialExtent(unique_bbox_list),
+                    pystac.collection.TemporalExtent([
+                        temporal_extents[k]
+                    ])
+                ),
+                summaries=pystac.Summaries(
+                    {
+                        kk : list(set([
+                            item.properties[kk] for item in v.values()
+                        ]))
+                        for kk in v["snow"].properties.keys()
+                    }
                 )
-            )
-            collections[exp_id].add_item(item)
-        
-    for coll in collections.values():
+            ))
+        for item in v.values():
+            collections[-1].add_item(item)
+    
+    for coll in collections:
         catalog.add_child(coll)
 
     return catalog

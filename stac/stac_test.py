@@ -215,6 +215,6 @@ def main(directory):
 
 if __name__ == "__main__":
     start = time.time()
-    main(sys.argv[1])
+    main(os.path.abspath(sys.argv[1]))
     print(time.time() - start)
     

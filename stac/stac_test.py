@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import pystac
 import os,sys
 import xarray as xr
@@ -6,6 +7,8 @@ import numpy as np
 from datetime import datetime, timezone
 from shapely.geometry import Polygon, mapping
 import time
+
+from stac_utils import MetadataSlowLoader, convert_timerange
 
 dirs = [None, None, None, None, 'experiment_id', 'member_id', 'realm', 'cell_methods', 'frequency', 'chunk_freq']
 fname = ["realm", "time_range", "variable_id"]
@@ -30,65 +33,6 @@ exp_titles = {
 
 
 
-def minmax(array):
-    return np.array([float(np.min(array)), float(np.max(array))])
-
-def minmax_bounded(array, bnds):
-    x = minmax(array)
-    while x[0] < bnds[0]:
-        x += 1
-    while x[1] > bnds[1]:
-        x -= 1
-    if x[0] < bnds[0] or x[1] > bnds[1]:
-        raise ValueError("bbox out of bounds")
-    return x
-
-class MetadataSlow():
-    def __init__(self, lats, lons, long_name, units):
-        self.lats = lats
-        self.lons = lons
-        self.long_name = long_name
-        self.units = units
-
-class MetadataSlowLoader():
-    def __init__(self):
-        self.dict = {}
-
-    def _get_bbox_footprint(self, variable_id):
-        bottom,top = self.dict[variable_id].lats
-        left,right = self.dict[variable_id].lons
-
-        bbox = [left, bottom, right, top]
-        footprint = Polygon([
-            [left, bottom],
-            [left, top],
-            [right, top],
-            [right, bottom]
-        ])
-
-        return (bbox, mapping(footprint))
-    
-    def get(self, path, properties):
-        var_id = properties["variable_id"]
-        if var_id not in self.dict:
-            ds = Dataset(path, memory=None)
-
-            if properties["realm"] == "ocean":
-                bt = minmax_bounded(ds.variables["yh"], [-90,90])
-                lr = minmax_bounded(ds.variables["xh"], [-180,180])
-            else:
-                bt = minmax_bounded(ds.variables["lat"], [-90,90])
-                lr = minmax_bounded(ds.variables["lon"], [-180,180])
-
-            long_name = ds.variables[var_id].long_name
-            units = ds.variables[var_id].units
-            self.dict[var_id] = MetadataSlow(bt, lr, long_name, units)
-        
-        bbox,fp = self._get_bbox_footprint(var_id)
-        return (bbox,fp,self.dict[var_id].long_name,self.dict[var_id].units)
-
-
-
 def get_metadata(path_to_file, dir_meta, file_meta, properties=props_template):
     d = dict(properties)
     filename = os.path.basename(path_to_file).split('.')
@@ -99,16 +43,7 @@ def get_metadata(path_to_file, dir_meta, file_meta, properties=props_template):
     for (i,x) in enumerate(file_meta):
         if x is not None:
             d[x] = filename[i]
-    starttime, endtime = d["time_range"].split('-')
-    if len(starttime) == 8:
-        starttime = datetime.strptime(starttime,'%Y%m%d').replace(tzinfo=timezone.utc)
-        endtime = datetime.strptime(endtime,'%Y%m%d').replace(tzinfo=timezone.utc)
-    elif len(starttime) == 6:
-        starttime = datetime.strptime(starttime,'%Y%m').replace(tzinfo=timezone.utc)
-        endtime = datetime.strptime(endtime,'%Y%m').replace(tzinfo=timezone.utc)
-    elif len(starttime) == 10:
-        starttime = datetime.strptime(starttime,'%Y%m%d%H').replace(tzinfo=timezone.utc)
-        endtime = datetime.strptime(endtime,'%Y%m%d%H').replace(tzinfo=timezone.utc)
+    starttime, endtime = convert_timerange(d["time_range"])
     return (d, starttime, endtime)
 
 # [-89.75, 89.75] ; [0.3125, 359.6875]

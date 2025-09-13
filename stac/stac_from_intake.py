@@ -1,8 +1,10 @@
+import os,sys
 from stac_utils import MetadataSlowLoader, convert_timerange
 import pystac
 import pandas as pd
+import time
 
-catPath = "/home/a3r/Documents/spear-flp/catalog_blue.csv"
+catPath = "/nbhome/a3r/code/spear-flp/catalog_blue.csv"
 
 properties = [
     "activity_id", 
@@ -21,8 +23,7 @@ properties = [
     "standard_name"
 ]
 
-def make_asset(row):
-
+def make_add_asset(row, item):
     a = pystac.Asset(
         href=row['path'],
         title="{}.{}".format(
@@ -32,14 +33,17 @@ def make_asset(row):
         media_type="application/netcdf",
         roles=["data"]
     )
-
-    return a
+    item.add_asset(key=a.title, asset=a)
 
 def stac_from_csv(catalog_path):
-    catalog = pd.read_csv(catalog_path)
+    catalog = pystac.Catalog(id="test-catalog", description="Test Catalog")
+
+    catalog_df = pd.read_csv(catalog_path).fillna('')
     metadata_reader = MetadataSlowLoader()
+
+    item_list = []
     
-    for grp,df in catalog.groupby(["experiment_id","variable_id"]):
+    for grp,df in catalog_df.groupby(["experiment_id","variable_id"]):
         title = grp[0] + '.' + grp[1]
 
         # all metadata from reading netCDF file should be same across group
@@ -48,25 +52,60 @@ def stac_from_csv(catalog_path):
             df.iloc[0].to_dict()
         )
 
-        print(nc_metadata)
+        # some metadata is static right now, some is contained in the assets
+        props = df.iloc[0][properties].to_dict()
+        props["product"] = "model-output"
+        props["institution_id"] = "NOAA-GFDL"
+        props["source_id"] = "SPEAR-MED"
+        props["standard_name"] = nc_metadata.long_name
+        props["variable_units"] = nc_metadata.units
 
-        # times = df["time_range"].apply(convert_timerange)
-        # start_time = times.min[0]
-        # end_time = times.max[-1]
+        times = df["time_range"].apply(convert_timerange)
+        start_time = times.min()[0]
+        end_time = times.max()[-1]
 
-        # item = pystac.Item(
-        #     id = title,
-        #     geometry = nc_metadata.footprint,
-        #     bbox = nc_metadata.bbox,
-        #     properties = df.iloc[0][properties].to_dict('records')[0]
-        # )
+        item = pystac.Item(
+            id = title,
+            geometry = nc_metadata.footprint,
+            bbox = nc_metadata.bbox,
+            properties = props,
+            start_datetime = start_time,
+            end_datetime = end_time,
+            datetime = None
+        )
 
-        # print(df.apply(make_asset,axis=1))
+        df.apply(make_add_asset,axis=1,args=(item,))
 
-        break
+        item_list.append(item)
 
-def main():
-    stac_from_csv(catPath)
+    c = pystac.Collection.from_items(item_list, id="SPEAR-FLP")
+    c.title = "SPEAR Forward-Looking Projections"
+    c.summaries = pystac.Summaries(
+        {
+            kk : list(set([
+                item.properties[kk] for item in item_list
+            ]))
+            for kk in item_list[0].properties.keys()
+        }
+    )
+    c.add_asset(
+        key="Collection Thumbnail",
+        asset=pystac.Asset(
+            href="/nbhome/a3r/test.png",
+            title="Collection Thumbnail",
+            media_type="image/png",
+            roles=["thumbnail"]
+        )
+    )
+
+    catalog.add_child(c)
+
+    return catalog
+
+def main(directory):
+    stac_cat = stac_from_csv(catPath)
+    stac_cat.normalize_hrefs(os.path.join(directory, "catalog"))
+    stac_cat.save(catalog_type=pystac.CatalogType.SELF_CONTAINED)
 
 if __name__=="__main__":
-    main()
+    main(sys.argv[1])

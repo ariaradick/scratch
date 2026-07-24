@@ -17,23 +17,25 @@ body:
     id: experiment_id
     attributes:
       label: Experiment
-      description: Are the checked datasets from historical or SSP585?
+      description: Which experiment do the checked datasets correspond to?
       options:
-        - Historical
-        - SSP585
+        - all
+        - historical
+        - "scenarioSSP5-85"
       default: 0
     validations:
       required: true
   - type: input
     id: time_range
     attributes:
-      label: Time Range
-      description: Enter the time range that was checked. Enter multiple with commas separating them or leave blank to report for all time ranges.
-      placeholder: Leave blank to select all...
+      label: Year Range
+      description: '(Optional) Leave blank to select all time ranges for the specified experiment(s).'
+      placeholder: yyyy-yyyy
   - type: dropdown
     id: pass_qc
     attributes:
-      label: Do the datasets pass the quality assurance checks?
+      label: "Do the datasets pass the quality control checks?" 
+      description: "If they do not pass, please explain below."
       options:
         - "Yes"
         - "No"
@@ -43,6 +45,6 @@ body:
   - type: textarea
     id: explanation
     attributes:
-      label: "Explain the steps taken to ensure quality assurance:"
+      label: "Explain the steps taken for quality control:"
     validations:
       required: true

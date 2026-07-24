@@ -14,6 +14,18 @@ body:
     validations:
       required: true
   - type: dropdown
+    id: frequency
+    attributes:
+      label: Frequency
+      description: What is the frequency of the saved data?
+      options:
+        - mon
+        - day
+        - 6hr
+      default: 0
+    validations:
+      required: true
+  - type: dropdown
     id: experiment_id
     attributes:
       label: Experiment
